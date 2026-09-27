@@ -32,6 +32,15 @@ and get back to building. Clawd will keep the vibes going. 🦀🎶
 
 - macOS 26 or later
 - Xcode 26 or later to build it
+- [yt-dlp](https://github.com/yt-dlp/yt-dlp), which finds the stream's audio for the app:
+
+```bash
+brew install yt-dlp
+```
+
+Claude FM looks for it in `/opt/homebrew/bin`, `/usr/local/bin` and `~/.local/bin`. If it can't
+find it, the menu tells you how to install it. Keep it fresh with `brew upgrade yt-dlp` when
+YouTube changes things and playback stops working.
 
 ## Build and run
 
@@ -54,33 +63,35 @@ The project signs "to run locally", so you don't need a developer team to try it
 
 ## How it works (and why)
 
-YouTube doesn't hand out a plain audio URL for its streams. The obvious approaches all have catches:
+YouTube doesn't hand out a plain audio URL for its streams, so something has to go and find one.
 
-| Approach | Why not |
-| --- | --- |
-| Point `AVPlayer` at an HLS link | YouTube's web and app clients now stream through SABR, a protocol that needs signed tokens. There's no stable `.m3u8` to grab. |
-| Resolve the stream with `yt-dlp` at runtime | Needs an extra tool installed, breaks whenever YouTube changes its internals, and the links it returns expire after a few hours. |
-| **Hidden YouTube embed player** ✅ | Uses YouTube's own official player, so it keeps working as YouTube changes things behind it. |
-
-So Claude FM loads the official
-[YouTube IFrame Player API](https://developers.google.com/youtube/iframe_api_reference)
-inside a `WKWebView` that you never see. The Swift side talks to it with a few lines of
-JavaScript (`play`, `pause`, `setVolume`) and hears back about player state through a
-`WKScriptMessageHandler`.
+1. **When you press play, Claude FM asks yt-dlp for the stream.** It requests YouTube's
+   audio-only live formats (itag 234, falling back to 233), so no video is ever downloaded.
+2. **yt-dlp returns an HLS playlist**, which `AVPlayer` plays natively, like any other internet radio.
+3. **Clawd takes the stage.** Because the app plays audio itself instead of through a web page,
+   it owns the Now Playing slot, so Control Center, notch apps and your media keys all show Claude FM
+   with Clawd as the artwork.
 
 A few details that make it behave:
 
-- **The player is created on first play**, so an idle Claude FM costs next to nothing.
-- **It's parked in a borderless window far off screen.** WebKit refuses to start media in a page
-  that isn't in a window, and this keeps it out of sight, out of the window cycle, and unclickable.
-- **It's only 320×180**, which nudges YouTube into a low video quality so it isn't decoding HD
-  frames nobody will ever look at.
-- **It's given a web origin**, because YouTube rejects embeds that arrive with no referrer.
+- **Nothing runs until you press play**, so an idle Claude FM costs next to nothing.
+- **Pause really stops.** Pausing drops the stream, so pressing play again jumps back to the live
+  edge instead of playing whatever you missed.
+- **Links are refreshed.** YouTube's links expire after a few hours. Claude FM reuses a link for up
+  to an hour, then fetches a new one. If playback fails, it fetches a fresh link and tries once more.
+- **It's light.** Playback uses about 1% CPU, with no hidden browser running in the background.
 
-The tradeoff: a web view is heavier than a native audio player (expect WebKit's helper processes
-to use a few percent of CPU while playing), and YouTube may occasionally show an ad before the
-stream starts. In return, you get something that doesn't break every time YouTube shuffles its
-furniture.
+### Why not the YouTube embed player?
+
+The first version played the official YouTube embed in a hidden web view. It worked, but a web view
+uses several times more CPU, and WebKit publishes YouTube's own Now Playing info, so notch apps showed
+YouTube's thumbnail instead of Clawd. yt-dlp is an extra dependency, but it gives us real native playback.
+
+### Why the app isn't sandboxed
+
+Sandboxed Mac apps can't run tools installed with Homebrew, so the App Sandbox is turned off to let
+Claude FM launch yt-dlp. That's normal for apps you build yourself or download outside the Mac App Store.
+The app only runs yt-dlp and plays the stream it returns.
 
 ## Project layout
 
@@ -88,7 +99,8 @@ furniture.
 ClaudeFM/
 ├── ClaudeFMApp.swift     # The MenuBarExtra scene and "play when opened"
 ├── PlayerMenu.swift      # The menu: play/pause, volume, settings, quit
-├── StreamPlayer.swift    # Hidden YouTube player and its state
+├── StreamPlayer.swift    # AVPlayer playback and its state
+├── StreamResolver.swift  # Asks yt-dlp for the stream's audio URL
 ├── NowPlaying.swift      # Control Center, media keys and Clawd's album art
 └── LaunchAtLogin.swift   # "Open at login" via SMAppService
 ```
