@@ -113,4 +113,4 @@ Anthropic. This is a fan-made project and isn't affiliated with or endorsed by A
 
 ## License
 
-MIT. Go forth and vibe.
+MIT. idc what you do with it :)
