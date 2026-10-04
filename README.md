@@ -2,7 +2,7 @@
   <img src="docs/icon.png" width="128" alt="Clawd, the Claude Code mascot, as the Claude FM icon">
 </p>
 
-<h1 align="center">Claude FM</h1>
+<h1 align="center">Claude FM Player</h1>
 
 <p align="center">
   <em>Music for thinking and building, one click away in your menu bar.</em>
